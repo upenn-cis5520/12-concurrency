@@ -1,0 +1,69 @@
+cabal-version:       >=1.10
+
+name:                cis5520-concurrency
+version:             0.1.0.0
+license-file:        LICENSE
+maintainer:          sweirich@seas.upenn.edu
+build-type:          Simple
+extra-source-files:  CHANGELOG.md
+
+
+library
+  exposed-modules:     Concurrency
+                     , Client
+                     , TransC      
+  build-depends:       base >=4.15
+                     , HUnit >= 1.6
+                     , network >= 3.1
+                     , mtl >= 2.2.2
+                     , containers >= 0.6
+  default-language:    Haskell2010
+  ghc-options:       -Wno-unused-matches
+  -- these extensions are enabled for GHC2021, turning them on now for 
+  -- future compatibility
+  default-extensions:
+    BangPatterns
+    BinaryLiterals
+    ConstrainedClassMethods
+    ConstraintKinds
+    DeriveDataTypeable
+    DeriveFoldable
+    DeriveFunctor
+    DeriveGeneric
+    DeriveLift
+    DeriveTraversable
+    DoAndIfThenElse
+    EmptyCase
+    EmptyDataDecls
+    EmptyDataDeriving
+    ExistentialQuantification
+    ExplicitForAll
+    FlexibleContexts
+    FlexibleInstances
+    ForeignFunctionInterface
+    GADTSyntax
+    GeneralisedNewtypeDeriving
+    HexFloatLiterals
+    ImplicitPrelude
+    ImportQualifiedPost
+    InstanceSigs
+    KindSignatures
+    MonomorphismRestriction
+    MultiParamTypeClasses
+    NamedFieldPuns
+    NamedWildCards
+    NumericUnderscores
+    PatternGuards
+    PolyKinds
+    PostfixOperators
+    RankNTypes
+    RelaxedPolyRec
+    ScopedTypeVariables
+    StandaloneDeriving
+    StandaloneKindSignatures
+    NoStarIsType
+    TraditionalRecordSyntax
+    TupleSections
+    TypeApplications
+    TypeOperators
+    TypeSynonymInstances
