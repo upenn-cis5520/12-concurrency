@@ -8,8 +8,9 @@ NOTE: We will work through the `undefined` parts of this lecture together in
 class. To prepare, please checkout the github repo and make sure that you
 can load the file in ghci in the terminal.
 
-To use this module, you will need to download
-the [Client](Client.lhs) module.
+           12-concurrency % stack ghci Concurrency.hs
+
+To use this module, you will also need the the [Client](Client.html) module.
 -}
 
 module Concurrency where
@@ -149,15 +150,15 @@ To make sure that we get the full effect of concurrency, we'll
 first turn off buffering on the standard input and output sources.
 -}
 
---    *Concurrency> import System.IO
---    *Concurrency> hSetBuffering stdout NoBuffering
---    *Concurrency> hSetBuffering stdin NoBuffering
+--    ghci> import System.IO
+--    ghci> hSetBuffering stdout NoBuffering
+--    ghci> hSetBuffering stdin NoBuffering
 
 {-
 Then we can use the schedular to run the program:
 -}
 
---    *Concurrency> sched [ prog ]
+--    ghci> sched [ prog ]
 
 {-
     CHIeSl l5o5
@@ -209,7 +210,7 @@ prog3 = writeComputation "Hello" (writeComputation " CIS 552\n" Stop)
 Let's see what happens with this program.
 -}
 
---    *Concurrency> sched [prog3]
+--    ghci> sched [prog3]
 
 {-
 We can then sequence "parameterized actions" together using this function.
@@ -240,10 +241,10 @@ last step.
 >
 -}
 
-   *Concurrency> sched [ hello552Computation Stop ]
-   *Concurrency> sched [ Fork (hello552Computation Stop) (hello552Computation Stop) ]
-   *Concurrency> let bomb = writeComputation "bomb" bomb
-   *Concurrency> sched [ bomb ]
+   ghci> sched [ hello552Computation Stop ]
+   ghci> sched [ Fork (hello552Computation Stop) (hello552Computation Stop) ]
+   ghci> let bomb = writeComputation "bomb" bomb
+   ghci> sched [ bomb ]
 {-
 >
 -}
@@ -437,7 +438,7 @@ to do anything else.
 
 -}
 
---     *Concurrency> infloop "CIS 552"
+--     ghci> infloop "CIS 552"
 
 {-
 But with concurrency, we can make this loop run in parallel with other
@@ -459,7 +460,7 @@ example = do
 We run this computation by giving it to the scheduler.
 -}
 
---    *Concurrency> run example
+--    ghci> run example
 
 {-
 Note that our implementation of `write` for the concurrency monad determines
@@ -523,7 +524,7 @@ ioloop s = do
 Try it out in GHCi!
 -}
 
---    *Concurrency> ioloop "CIS 552"   -- defaults to IO monad
+--    ghci> ioloop "CIS 552"   -- defaults to IO monad
 
 {-
 We can run this thread concurrently with other threads by making an
@@ -542,7 +543,7 @@ example2 = do
 Try it out!
 -}
 
---    *Main> run example2
+--    ghci> run example2
 
 {-
 Shared State
@@ -659,7 +660,7 @@ example6 = do
   fork $ simulation mv 0
   interface mv input
 
---   *Concurrency> run example6
+--   ghci> run example6
 
 {-
 What about multiple sources of inputs?
@@ -734,7 +735,7 @@ example7 port = do
 {-
 To make this example work, first start the server
 
-        Concurrency> run $ example7 "1025"
+        ghci> run $ example7 "1025"
 
 This example will work just like `example6` above. You can send it commands locally
 (because it has a local copy of the interface). Keep it running.

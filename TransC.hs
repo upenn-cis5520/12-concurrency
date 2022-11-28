@@ -1,6 +1,7 @@
 {-
 ---
 fulltitle: "In class exercise: Concurrency Monad Transformer"
+date: November 30, 2022
 ---
 -}
 

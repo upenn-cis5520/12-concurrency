@@ -2,6 +2,7 @@
 {-
 ---
 fulltitle: "In class exercise: Concurrency Monads and Extensible Effects"
+date: December 30, 2022
 ---
 -}
 {-# LANGUAGE GADTs #-}
