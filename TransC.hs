@@ -154,8 +154,8 @@ testEcho2 :: Test
 testEcho2 =
   runFakeIO
     (echo >> echo)
-    [Just "hello", Nothing, Just "CIS 552"]
-    ~?= ["hello", "\n", "CIS 552", "\n"]
+    [Just "hello", Nothing, Just "CIS 5520"]
+    ~?= ["hello", "\n", "CIS 5520", "\n"]
 
 -- >>> runTestTT testEcho2
 
@@ -264,14 +264,14 @@ For example, given an output function:
 
 example :: Output m => C m ()
 example = do
-  fork (write "Hello " >> write "552")
+  fork (write "Hello " >> write "5520")
   write "CIS"
 
 {-
 We can run it in the IO monad
 
-          Main*>  run (example :: C IO ())
-          Hello CIS552
+          ghci>  run (example :: C IO ())
+          Hello CIS5520
 
 Or run it in the *Concurrent* FakeIO monad.
 -}
@@ -280,7 +280,7 @@ runCFakeIO :: C FakeIO () -> [Maybe String] -> [String]
 runCFakeIO x inputs = undefined
 
 testWrite :: Test
-testWrite = runCFakeIO example [] ~?= ["Hello ", "CIS", "552"]
+testWrite = runCFakeIO example [] ~?= ["Hello ", "CIS", "5520"]
 
 -- >>> runTestTT testWrite
 
