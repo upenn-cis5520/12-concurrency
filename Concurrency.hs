@@ -1,17 +1,19 @@
 {-
 ---
 fulltitle: A Poor Man's Concurrency Monad
-date: November 28, 2022
+date: November 27, 2023
 ---
 
 NOTE: We will work through the `undefined` parts of this lecture together in
 class. To prepare, please checkout the github repo and make sure that you
-can load the file in ghci in the terminal.
+can load the file in the terminal. (A lot of the examples in this file use I/O
+so inline doctests won't work.)
 
-           12-concurrency % stack ghci Concurrency.hs
+           stack ghci Concurrency.hs
 
 To use this module, you will also need the the [Client](Client.html) module.
 -}
+{-# LANGUAGE FunctionalDependencies #-}
 
 module Concurrency where
 
@@ -95,13 +97,13 @@ threads, or a Stop action that halts the thread.
 -}
 
 data Action
-  = Atom (IO Action) -- an atomic computation, returning a new action
+  = Atomic (IO Action) -- an atomic computation, returning a new action
   | Fork Action Action -- create a new thread
   | Stop -- terminate this thread
 
 {-
 Let's look at some example actions.  For example, this one writes out a
-string letter by letter.
+single string letter by letter.
 -}
 
 writeAction :: String -> Action
@@ -112,7 +114,7 @@ And this one writes two strings concurrently.
 -}
 
 prog :: Action
-prog = Fork (writeAction "Hello\n") (writeAction "CIS 552\n")
+prog = Fork (writeAction "Hello\n") (writeAction "CIS 5520\n")
 
 {-
 How do we run these programs?
@@ -162,21 +164,21 @@ Then we can use the schedular to run the program:
 
 {-
     CHIeSl l5o5
-    2
+    20
 
 Writing Programs, compositionally
 =================================
 
 Suppose you wanted to write a program that does the following: writes "Hello"
-and *then* writes "CIS 552". We would love to have some sort of sequence
+and *then* writes "CIS 5520". We would love to have some sort of sequence
 operation, that would run one action after another, thus:
 -}
 
 sequenceAction :: Action -> Action -> Action
 sequenceAction a1 a2 = error "Hypothetical. Don't try to write me."
 
-hello552 :: Action
-hello552 = writeAction "Hello" `sequenceAction` writeAction "CIS 552"
+hello5520 :: Action
+hello5520 = writeAction "Hello" `sequenceAction` writeAction "CIS 5520"
 
 {-
 Unfortunately, there isn't a good way to do this with our current set-up.
@@ -204,7 +206,7 @@ as the "last action".
 -}
 
 prog3 :: Action
-prog3 = writeComputation "Hello" (writeComputation " CIS 552\n" Stop)
+prog3 = writeComputation "Hello" (writeComputation " CIS 5520\n" Stop)
 
 {-
 Let's see what happens with this program.
@@ -223,35 +225,23 @@ sequenceComputation ::
 sequenceComputation = undefined
 
 {-
-For example, here is the `hello552` sequence above:
+For example, here is the `hello5520` sequence above:
 -}
 
-hello552Computation :: Action -> Action
-hello552Computation =
+hello5520Computation :: Action -> Action
+hello5520Computation =
   writeComputation "Hello"
-    `sequenceComputation` writeComputation "CIS 552\n"
+    `sequenceComputation` writeComputation "CIS 5520\n"
 
 {-
 We can run "parameterized actions" by giving them the "Stop" action as their
-last step.
--}
+last step. Here are some examples:
 
-{-
-{-
->
--}
+    ghci> sched [ hello5520Computation Stop ]
+    ghci> sched [ Fork (hello5520Computation Stop) (hello5520Computation Stop) ]
+    ghci> let bomb = writeComputation "bomb" bomb
+    ghci> sched [ bomb ]
 
-   ghci> sched [ hello552Computation Stop ]
-   ghci> sched [ Fork (hello552Computation Stop) (hello552Computation Stop) ]
-   ghci> let bomb = writeComputation "bomb" bomb
-   ghci> sched [ bomb ]
-{-
->
--}
-
--}
-
-{-
 Concurrency Monad
 =================
 
@@ -342,7 +332,7 @@ returnCompM x = undefined
 Putting this all together, we can define a monadic type using a newtype:
 -}
 
-newtype C a = C {runC :: (a -> Action) -> Action}
+newtype C a = MkC {runC :: (a -> Action) -> Action}
 
 {-
 We can show that `C` is a monad using essentially the same code as
@@ -351,16 +341,19 @@ above, after taking account of the newtype constructor.
 
 instance Monad C where
   (>>=) :: C a -> (a -> C b) -> C b
-  m >>= f = C $ \k -> runC m (\v -> runC (f v) k)
+  m >>= f = MkC $ \k -> runC m (\v -> runC (f v) k)
 
   return :: a -> C a
-  return x = C $ \k -> k x
+  return x = MkC $ \k -> k x
 
 instance Applicative C where
+  pure :: a -> C a
   pure = return
+  (<*>) :: C (a -> b) -> C a -> C b
   (<*>) = ap
 
 instance Functor C where
+  fmap :: (a -> b) -> C a -> C b
   fmap = liftM
 
 {-
@@ -370,24 +363,27 @@ Monadic computation library
 Let's define some actions that can help us build and run computations in the
 `C` monad.
 
-The `atom` function turns an arbitrary computation in the IO monad
+The `atomic` function turns an arbitrary computation in the IO monad
 into an atomic action in `C`. An atomic action is one that that runs
 the monadic computation and then passes its result to the
 continuation.  (We know that the monadic computation `m` will not be
 interrupted; that is why this is called "atomic".)
 -}
 
-atom :: IO a -> C a
-atom = undefined
+atomic :: IO a -> C a
+atomic = undefined
 
 {-
 For thread spawning, there are multiple possible primitives -- we'll present
 just one here.  This primitive turns its argument into a separate "top-level"
-action and then continues the current computation.
+action and then continues the current computation, in a similar way to the UNIX
+OS fork command.
 -}
 
+-- Create a fork action with the given computation (stopping on completion)
+-- and the current continutation.
 fork :: C () -> C ()
-fork m = C $ \k -> Fork (runC m (const Stop)) (k ())
+fork m = MkC (\k -> Fork (runC m (const Stop)) (k ()))
 
 {-
 Finally, running a computation is merely turning it into an action and then
@@ -422,10 +418,22 @@ For example, we can make the 'IO' monad a member of this class.
 -}
 
 instance OutputMonad IO where
+  write :: String -> IO ()
   write = putStr
 
 {-
-Now, here is an infinite loop that just prints its argument over and
+We can also make the concurrency monad a member of
+the `OutputMonad` class, using `atomic`. This definition
+outputs the given string atomically.
+-}
+
+instance OutputMonad C where
+  write :: String -> C ()
+  write s = atomic (putStr s)
+
+{-
+Let's look at example program that works in an `OutputMonad`.
+Here is an infinite loop that just prints its argument over and
 over.
 -}
 
@@ -436,36 +444,26 @@ infloop = undefined
 If we run this loop from the ghci toplevel (in the IO monad) we don't get
 to do anything else.
 
+        ghci> infloop "CIS 5520"
+
+But in the concurrency monad, we can make this loop run in parallel with other
+computations.
 -}
-
---     ghci> infloop "CIS 552"
-
-{-
-But with concurrency, we can make this loop run in parallel with other
-computations. To do that, we need to run `loop` in the concurrency
-monad. Therefore, we need to make the concurrency monad a member of
-the `OutputMonad` class. This is easy using `atom`:
--}
-
-instance OutputMonad C where
-  write s = atom (write s)
 
 example :: C ()
 example = do
   write "It's raining..."
   fork (infloop "dog\n")
-  fork (infloop "cat\n")
+  infloop "cat\n"
 
 {-
 We run this computation by giving it to the scheduler.
--}
 
---    ghci> run example
+        ghci> run example
 
-{-
 Note that our implementation of `write` for the concurrency monad determines
 how much interleaving is possible between two different simultaneous
-writes. Each use of `atom` creates an atomic action that cannot be
+writes. Each use of `atomic` creates an action that cannot be
 interrupted.
 
 If we prefer, we can redefine `write` so that the atomic actions are
@@ -473,8 +471,8 @@ single-character writes instead of whole strings at a time.
 -}
 
 -- instance OutputMonad C where
---    write []     = atom (write [])
---    write (x:xs) = atom (write [x]) >> write xs
+--    write []     = atomic (write [])
+--    write (x:xs) = atomic (write [x]) >> write xs
 
 {-
 Or, if we wanted to use both, we could keep the old `write` and define
@@ -502,12 +500,23 @@ input (using `hReady`) before we use the standard blocking operation
 -}
 
 instance InputMonad IO where
+  input :: IO (Maybe String)
   input = do
     x <- IO.hReady IO.stdin
     if x then Just <$> getLine else return Nothing
 
 {-
-For example, we can write a loop that prints out a string until a
+And, once we have an IO instance, we can use `atomic` to lift this
+operation to the concurrency monad.
+-}
+
+instance InputMonad C where
+  input :: C (Maybe String)
+  input = atomic input
+
+{-
+Let's look at a program that is parametric in the Input and Output
+monad. For example, we can write a loop that prints out a string until a
 line is entered in the keyboard.
 -}
 
@@ -522,17 +531,12 @@ ioloop s = do
 
 {-
 Try it out in GHCi!
+
+        ghci> ioloop "CIS 5520"   -- defaults to IO monad
+
+With the instance for the concurrency monad, we can run this
+program in parallel with other threads.
 -}
-
---    ghci> ioloop "CIS 552"   -- defaults to IO monad
-
-{-
-We can run this thread concurrently with other threads by making an
-instance of the `InputMonad` class for the concurrency monad.
--}
-
-instance InputMonad C where
-  input = atom input
 
 example2 :: C ()
 example2 = do
@@ -541,63 +545,16 @@ example2 = do
 
 {-
 Try it out!
--}
 
---    ghci> run example2
+        ghci> run example2
 
-{-
 Shared State
 ============
 
 Sometimes threads may wish to communicate with each other by passing
-messages through some shared state. An abstraction designed for that
-purpose is an 'MVar'. A MVar is a potentially empty memory location.
-Initially, the location is empty, but it can be updated to contain
-information.  When the memory location is read, then the data is
-removed (atomically), so that it becomes empty until it is next
-written.
+messages through some shared state.
 
-(N.b.: IORef is Haskell's type of "reference cells" -- mutable heap
-cells, in the style of ML -- with read and write operations that live
-in the IO monad.)
--}
-
-type MVar a = IO.IORef (Maybe a)
-
-class Monad m => MVarMonad m where
-  newMVar :: m (MVar a)
-  writeMVar :: MVar a -> a -> m ()
-  takeMVar :: MVar a -> m (Maybe a)
-
-instance MVarMonad IO where
-  newMVar = IO.newIORef Nothing
-  writeMVar v a = IO.writeIORef v (Just a)
-  takeMVar = undefined
-
-{-
-We are justified in calling these MVars because all of the operations happen
-atomically.
--}
-
-instance MVarMonad C where
-  newMVar = atom newMVar
-  writeMVar v a = atom (writeMVar v a)
-  takeMVar v = atom (takeMVar v)
-
-{-
-Next let's define a blocking read function for MVars, which waits
-(actually, loops) until a value is ready to be read.  Note that this
-operation *requires* concurrency to do anything interesting...
--}
-
-readMVar :: (MVarMonad m) => MVar a -> m a
-readMVar = undefined
-
-{-
-Now here is an example using an MVar to implement a simple form of
-message passing. We have two threads that communicate via
-messages. One thread will be running a "simulation", the other will be
-the "user interface."
+We can describe this behavior with the following types.
 
 First, we'll define a short language of messages to send back and
 forth....
@@ -610,14 +567,71 @@ data Msg
   | Quit
 
 {-
+Then, a class of monads that can create mailboxes for these messages
+and send and receive messages through these mailboxes.
+-}
+
+class Monad m => MsgMonad b m | m -> b where
+  newMailbox :: m b
+  sendMsg :: b -> Msg -> m ()
+  checkMsg :: b -> m (Maybe Msg)
+
+{-
+This type class is parameterized by two types: the monad type `m` and a mailbox
+type `b`, which is a potentially empty memory location. Initially,
+the location is empty, but it can be updated to contain
+information using `sendMsg`.  When the memory location is read via
+`checkMsg`, then the data is removed (atomically), so that the mailbox
+becomes empty until it is next written.
+
+For example, we can create an instance of this class for the `IO` monad
+using the `IORef` type. This type describes Haskell's type of
+"reference cells" -- mutable heap cells, in the style of ML
+-- with read and write operations that live in the IO monad.
+-}
+
+type Mailbox = IO.IORef (Maybe Msg)
+
+instance MsgMonad Mailbox IO where
+  newMailbox :: IO Mailbox
+  newMailbox = IO.newIORef Nothing
+  sendMsg :: Mailbox -> Msg -> IO ()
+  sendMsg v a = IO.writeIORef v (Just a)
+  checkMsg :: Mailbox -> IO (Maybe Msg)
+  checkMsg = undefined
+
+{-
+With this instance making the operations available in the `IO` monad, we can also lift them into the concurrency monad, using the following instance.
+-}
+
+instance MsgMonad Mailbox C where
+  newMailbox :: C Mailbox
+  newMailbox = atomic newMailbox
+
+  sendMsg :: Mailbox -> Msg -> C ()
+  sendMsg k m = atomic (sendMsg k m)
+
+  checkMsg :: Mailbox -> C (Maybe Msg)
+  checkMsg k = atomic (checkMsg k)
+
+{-
+Mailboxes are a good primitive for concurrent programming, because we don't have
+to worry about race conditions. Note that even though `checkMsg` includes both a
+read and a write, we don't have to worry about race conditions because the computation will be run atomically by the thread scheduler.
+
+Now here is an example that uses our simple form of
+message passing. We have two threads that communicate via
+messages. One thread will be running a "simulation", the other will be
+the "user interface."
+
 The simulation just manages the value of an integer, either
 incrementing it, resetting it, or printing it based on the messages
 received from the interface.
 -}
 
-simulation :: MVar Msg -> Integer -> C ()
+simulation :: Mailbox -> Integer -> C ()
 simulation mv i = do
-  x <- takeMVar mv
+  x <- checkMsg mv
   case x of
     Just Add -> do
       write "Adding...\n"
@@ -636,16 +650,16 @@ The interface reads keys from the keyboard and parses them into
 messages for the simulation.
 -}
 
-interface :: MVar Msg -> C (Maybe String) -> C ()
+interface :: Mailbox -> C (Maybe String) -> C ()
 interface mv getInput = loop
   where
     loop = do
       maybeKey <- getInput
       case maybeKey of
-        Just "a" -> writeMVar mv Add >> loop
-        Just "r" -> writeMVar mv Reset >> loop
-        Just "p" -> writeMVar mv Print >> loop
-        Just "q" -> writeMVar mv Quit
+        Just "a" -> sendMsg mv Add >> loop
+        Just "r" -> sendMsg mv Reset >> loop
+        Just "p" -> sendMsg mv Print >> loop
+        Just "q" -> sendMsg mv Quit
         Just s -> write ("Unknown command: " ++ s ++ "\n") >> loop
         Nothing -> loop
 
@@ -656,7 +670,7 @@ interface concurrently with the interface.
 
 example6 :: C ()
 example6 = do
-  mv <- newMVar
+  mv <- newMailbox
   fork $ simulation mv 0
   interface mv input
 
@@ -673,14 +687,14 @@ the local interface?
 
 We could do that with an additional, network interface. This code sets
 up a socket to listen for commands sent via the code in
-[Client.hs](Client.hs).
+[Client.hs](Client.html).
 -}
 
 -- | Create an interface to the server that communicates via a socket
 -- on the specified port
-network :: String -> MVar Msg -> C ()
+network :: String -> Mailbox -> C ()
 network port mv = do
-  handle <- atom $
+  handle <- atomic $
     Socket.withSocketsDo $ do
       putStrLn "Opening a socket."
       addr <- resolve
@@ -690,13 +704,13 @@ network port mv = do
       Socket.socketToHandle conn IO.ReadMode
   interface
     mv
-    ( atom $ do
+    ( atomic $ do
         x <- IO.hReady handle
         if x
           then Just <$> IO.hGetLine handle
           else return Nothing
     )
-  atom $ do
+  atomic $ do
     IO.hClose handle
     putStrLn "Socket closed."
   where
@@ -727,7 +741,7 @@ Here's our code that starts the server.
 
 example7 :: String -> C ()
 example7 port = do
-  mv <- newMVar
+  mv <- newMailbox
   fork (simulation mv 0)
   fork (interface mv input)
   network port mv
@@ -743,14 +757,12 @@ This example will work just like `example6` above. You can send it commands loca
 Then, in another terminal, load the client code into GHC. If everything goes
 well, the `client` function will return a handle that can be used to
 communicate with the server.
--}
 
---        *Client> h <- client local "1025"
+          *Client> h <- client local "1025"
 
-{-
 This handle can be used with the `send` command.
--}
 
---        *Client> send h "p"
---        *Client> send h "a"   -- no output here, all effects are shown on the server
---        *Client> send h "r"
+          *Client> send h "p"
+          *Client> send h "a"   -- no output here, all effects are shown on the server
+          *Client> send h "r"
+-}

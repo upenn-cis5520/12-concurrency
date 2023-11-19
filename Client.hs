@@ -1,7 +1,7 @@
 {-
 ---
 fulltitle: Concurrency client
-date: November 28, 2022
+date: November 20, 2023
 ---
 
 This module goes with the [Concurrency](Concurrency.html) lecture. It
