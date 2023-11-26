@@ -411,16 +411,8 @@ instance MsgMonad k m => MsgMonad k (C m) where
   newMailbox :: MsgMonad k m => C m k
   newMailbox = lift newMailbox
 
-  {-
-  >
-  -}
-
   sendMsg :: MsgMonad k m => k -> Msg -> C m ()
   sendMsg k m = lift (sendMsg k m)
-
-  {-
-  >
-  -}
 
   checkMsg :: MsgMonad k m => k -> C m (Maybe Msg)
   checkMsg k = lift (checkMsg k)
@@ -518,18 +510,10 @@ instance Monad m => MsgMonad Int (S.StateT Store m) where
   newMailbox :: S.StateT Store m Int
   newMailbox = undefined
 
-{-
->
+  sendMsg :: Int -> Msg -> S.StateT Store m ()
+  sendMsg k msg = undefined
 
-   sendMsg :: Int -> Msg -> S.StateT Store m ()
-   sendMsg k msg = undefined
-{-
->
--}
+  checkMsg :: Int -> S.StateT Store m (Maybe Msg)
+  checkMsg k = undefined 
 
-   checkMsg :: Int -> S.StateT Store m (Maybe Msg)
-   checkMsg k = undefined -}
 
-{-
-
--}
