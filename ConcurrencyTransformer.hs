@@ -1,11 +1,11 @@
-{-# LANGUAGE FunctionalDependencies #-}
 {-
 ---
-
 fulltitle: "In class exercise: Concurrency Monad Transformer"
 date: November 29, 2023
 ---
 -}
+
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module ConcurrencyTransformer where
@@ -84,7 +84,9 @@ echo = do
 
 {-
 If I run this program in ghci using the `IO` monad by default, I can see that
-it just spits out whatever I type in. (Remeber, you can start ghci in the Terminal using `stack ghci TransC.hs`)
+it just spits out whatever I type in. (Remember, you can start ghci in the Terminal
+using `stack ghci ConcurrencyTransformer.hs`. You will also need to reload this file
+into ghci, using `:r`, every time that you modify it.)
 
             ghci> echo
             Hello        <---- I typed this
@@ -94,11 +96,12 @@ Try it out yourself!
 
 But how can we make a unit test for this (simple) program?
 
-The answer is that we will *mock* the IO monad using a different, pure monad.
+The answer is that we will *mock* the IO monad using a different (pure) monad. This
+monad will use a data structure to represent input and output events, and we can
+look at that data structure in our tests.
 
 Here's a way to do this. We define a datatype of the IO operations that
-record a *trace* of the execution and make this datatype an instance
-of the `Monad` type class.
+record a *trace* of the execution.
 -}
 
 data TraceIO a
@@ -106,38 +109,21 @@ data TraceIO a
   | Output String (TraceIO a)
   | Input (Maybe String -> TraceIO a)
 
-instance Monad TraceIO where
-  (>>=) :: TraceIO a -> (a -> TraceIO b) -> TraceIO b
-  (Done a) >>= f = f a
-  (Output req k) >>= f = Output req (k >>= f)
-  (Input k) >>= f = Input $ k >=> f
-
 {-
-The Input and Ouput classes use these data constructors to record the
-interactions.
+For example, the trace of the echo program above looks like this:
 -}
 
-instance Output TraceIO where
-  output :: String -> TraceIO ()
-  output s = Output s (return ())
-
-instance Input TraceIO where
-  input :: TraceIO (Maybe String)
-  input = Input return
-
-instance Applicative TraceIO where
-  pure :: a -> TraceIO a
-  pure = Done
-  (<*>) :: TraceIO (a -> b) -> TraceIO a -> TraceIO b
-  (<*>) = ap
-
-instance Functor TraceIO where
-  fmap :: (a -> b) -> TraceIO a -> TraceIO b
-  fmap = liftM
+echoTrace :: TraceIO ()
+echoTrace =
+  Input
+    ( \ms -> case ms of
+        Just str -> Output str (Output "\n" (Done ()))
+        Nothing -> echoTrace
+    )
 
 {-
-The main part of the computation is in the `run` function that
-interprets a trace using a list of inputs.
+A test case can the "run" the trace, with a specific list of inputs to
+mock what happens during an execution.
 -}
 
 runTraceIO :: TraceIO () -> [Maybe String] -> [String]
@@ -148,11 +134,69 @@ runTraceIO = go
     go (Input f) (x : xs) = go (f x) xs
     go (Input f) [] = go (f Nothing) []
 
--- >>> runTraceIO echo  [Nothing, Nothing, Just "hello"]
+-- >>> runTraceIO echoTrace [Nothing, Nothing, Just "hello"]
 -- ["hello","\n"]
 
+-- >>> runTraceIO echoTrace [Just "x", Nothing, Nothing, Just "y"]
+-- ["x","\n"]
+
 {-
+However, for a given program like `echo`, we don't want to have
+to construct its trace by hand. We'd like to test the original program.
+Fortunately, `echo` is generic over the Monad that we use for execution.
+So by making the `TraceIO` type an instance of the `Monad` type class,
+we can extract the `echoTrace` definition directly from the `echo` program
+itself.
+-}
+
+instance Monad TraceIO where
+  return :: a -> TraceIO a
+  return = Done
+  (>>=) :: TraceIO a -> (a -> TraceIO b) -> TraceIO b
+  (>>=) = undefined
+
+{-
+(As usual, the Applicative and Functor instances can be derived from the
+Monad instance.)
+-}
+
+instance Applicative TraceIO where
+  pure :: a -> TraceIO a
+  pure = return
+  (<*>) :: TraceIO (a -> b) -> TraceIO a -> TraceIO b
+  (<*>) = ap
+
+instance Functor TraceIO where
+  fmap :: (a -> b) -> TraceIO a -> TraceIO b
+  fmap = liftM
+
+{-
+Furthemore, to test the `echo` example, we need instances of the `Input` and `Ouput` classes. These instances use
+the data constructors to record the interactions.
+-}
+
+instance Output TraceIO where
+  output :: String -> TraceIO ()
+  output s = Output s (return ())
+
+instance Input TraceIO where
+  input :: TraceIO (Maybe String)
+  input = Input return
+
+{-
+With these instances, we can call `runTraceIO` with the original `echo` program.
 The nice thing about this approach is that our tests are pure code.
+-}
+
+-- >>> runTraceIO echo [Nothing, Nothing, Just "hello"]
+-- ["hello","\n"]
+
+-- >>> runTraceIO echo [Just "x", Nothing, Nothing, Just "y"]
+-- ["x","\n"]
+
+{-
+Not only can you test them inline, but you can also make them into
+unit tests.
 -}
 
 testTraceEcho :: Test
@@ -213,12 +257,14 @@ Now, make this new type a monad:
 -}
 
 instance Monad m => Monad (C m) where
+  return :: a -> C m a
+  return x = undefined
   (>>=) :: Monad m => C m a -> (a -> C m b) -> C m b
   m >>= f = undefined
 
 instance Monad m => Applicative (C m) where
   pure :: Monad m => a -> C m a
-  pure x = undefined
+  pure = return
   (<*>) :: Monad m => C m (a -> b) -> C m a -> C m b
   (<*>) = ap
 
@@ -509,11 +555,11 @@ checked there won't be any messages available.
 instance Monad m => MsgMonad Int (S.StateT Store m) where
   newMailbox :: S.StateT Store m Int
   newMailbox = undefined
-
   sendMsg :: Int -> Msg -> S.StateT Store m ()
   sendMsg k msg = undefined
-
   checkMsg :: Int -> S.StateT Store m (Maybe Msg)
-  checkMsg k = undefined 
+  checkMsg k = undefined
 
+{-
 
+-}

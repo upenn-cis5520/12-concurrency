@@ -18,3 +18,4 @@
 - ignore: {name: "Use minimum"}
 - ignore: {name: "Unused LANGUAGE pragma"}
 - ignore: {name: "Redundant lambda"}
+- ignore: {name: "Use lambda-case" }
