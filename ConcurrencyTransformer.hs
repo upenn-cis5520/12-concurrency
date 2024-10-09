@@ -1,17 +1,16 @@
+{-# LANGUAGE FunctionalDependencies #-}
 {-
 ---
 fulltitle: "In class exercise: Concurrency Monad Transformer"
-date: November 29, 2023
+date: November 20, 2024
 ---
 -}
-
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module ConcurrencyTransformer where
 
 import Control.Monad (ap, liftM, (>=>))
-import qualified Control.Monad.State as S
+import Control.Monad.State qualified as S
 import Control.Monad.State.Class
 import Control.Monad.Trans (MonadTrans (..))
 {-
@@ -23,11 +22,11 @@ head and tail of the data structure.
 
 import Data.Foldable (toList)
 import Data.Function ((&))
-import qualified Data.IORef as IO
-import qualified Data.Map as Map
+import Data.IORef qualified as IO
+import Data.Map qualified as Map
 import Data.Sequence (Seq)
-import qualified Data.Sequence as Seq
-import qualified System.IO as IO
+import Data.Sequence qualified as Seq
+import System.IO qualified as IO
 {-
 Note, today is all about testing.
 -}
@@ -50,10 +49,10 @@ Here are the definitions that we saw before, describing monads that support
 non-blocking I/O.
 -}
 
-class Monad m => Output m where
+class (Monad m) => Output m where
   output :: String -> m ()
 
-class Monad m => Input m where
+class (Monad m) => Input m where
   input :: m (Maybe String) -- only return input if it is ready
 
 {-
@@ -256,20 +255,20 @@ newtype C m a = MkC {runC :: (a -> Action m) -> Action m}
 Now, make this new type a monad:
 -}
 
-instance Monad m => Monad (C m) where
+instance (Monad m) => Monad (C m) where
   return :: a -> C m a
   return x = undefined
-  (>>=) :: Monad m => C m a -> (a -> C m b) -> C m b
+  (>>=) :: (Monad m) => C m a -> (a -> C m b) -> C m b
   m >>= f = undefined
 
-instance Monad m => Applicative (C m) where
-  pure :: Monad m => a -> C m a
+instance (Monad m) => Applicative (C m) where
+  pure :: (Monad m) => a -> C m a
   pure = return
-  (<*>) :: Monad m => C m (a -> b) -> C m a -> C m b
+  (<*>) :: (Monad m) => C m (a -> b) -> C m a -> C m b
   (<*>) = ap
 
-instance Monad m => Functor (C m) where
-  fmap :: Monad m => (a -> b) -> C m a -> C m b
+instance (Monad m) => Functor (C m) where
+  fmap :: (Monad m) => (a -> b) -> C m a -> C m b
   fmap = liftM
 
 {-
@@ -302,12 +301,12 @@ Next, show how to implement input and output for
 this new parameterized concurrency monad.
 -}
 
-instance Input m => Input (C m) where
-  input :: Input m => C m (Maybe String)
+instance (Input m) => Input (C m) where
+  input :: (Input m) => C m (Maybe String)
   input = undefined
 
-instance Output m => Output (C m) where
-  output :: Output m => String -> C m ()
+instance (Output m) => Output (C m) where
+  output :: (Output m) => String -> C m ()
   output = undefined
 
 {-
@@ -316,7 +315,7 @@ Let's define and test a *concurrent* program that does IO.
 For example, given an output function:
 -}
 
-example :: Output m => C m ()
+example :: (Output m) => C m ()
 example = do
   fork (output "Hello " >> output "5520")
   output "CIS"
@@ -362,7 +361,7 @@ allow it to work gracefully with other monad transformers.
 -}
 
 instance MonadTrans C where
-  lift :: Monad m => m a -> C m a
+  lift :: (Monad m) => m a -> C m a
   lift = atomic
 
 {-
@@ -380,7 +379,7 @@ This example relies on the following interface, for monads that
 support message passing through shared mailboxes.
 -}
 
-class Monad m => MsgMonad b m | m -> b where
+class (Monad m) => MsgMonad b m | m -> b where
   newMailbox :: m b
   sendMsg :: b -> Msg -> m ()
   checkMsg :: b -> m (Maybe Msg)
@@ -453,14 +452,14 @@ instance MsgMonad Mailbox IO where
 And then lift the message passing to the concurrency monad, using the `lift` operation (aka atomic).
 -}
 
-instance MsgMonad k m => MsgMonad k (C m) where
-  newMailbox :: MsgMonad k m => C m k
+instance (MsgMonad k m) => MsgMonad k (C m) where
+  newMailbox :: (MsgMonad k m) => C m k
   newMailbox = lift newMailbox
 
-  sendMsg :: MsgMonad k m => k -> Msg -> C m ()
+  sendMsg :: (MsgMonad k m) => k -> Msg -> C m ()
   sendMsg k m = lift (sendMsg k m)
 
-  checkMsg :: MsgMonad k m => k -> C m (Maybe Msg)
+  checkMsg :: (MsgMonad k m) => k -> C m (Maybe Msg)
   checkMsg k = lift (checkMsg k)
 
 -- run in the Concurrent IO monad, but only in a program or in ghci
@@ -486,7 +485,8 @@ pass run the following example:
 
 runCState :: C (S.StateT Store TraceIO) () -> [Maybe String] -> [String]
 runCState x inputs =
-  x & run
+  x
+    & run
     & flip S.evalStateT Map.empty
     & flip runTraceIO inputs
 
@@ -525,12 +525,12 @@ we can do Input/Output in the StateT transformer monad.
 
 -}
 
-instance Output m => Output (S.StateT s m) where
-  output :: Output m => String -> S.StateT s m ()
+instance (Output m) => Output (S.StateT s m) where
+  output :: (Output m) => String -> S.StateT s m ()
   output str = lift (output str)
 
-instance Input m => Input (S.StateT s m) where
-  input :: Input m => S.StateT s m (Maybe String)
+instance (Input m) => Input (S.StateT s m) where
+  input :: (Input m) => S.StateT s m (Maybe String)
   input = lift input
 
 {-
@@ -548,11 +548,11 @@ adding a new mapping from that `Int` to `Nothing`. Sending a message is
 updating the store with a mapping at the given key to `Just` the message.
 Finally, checking for a message requires looking up the key in the store and
 returning any messages. Furthermore, as in the `IO` example above, we should
-*remove* the message from the mailbox, so that the next time the mailbox is
+\*remove* the message from the mailbox, so that the next time the mailbox is
 checked there won't be any messages available.
 -}
 
-instance Monad m => MsgMonad Int (S.StateT Store m) where
+instance (Monad m) => MsgMonad Int (S.StateT Store m) where
   newMailbox :: S.StateT Store m Int
   newMailbox = undefined
   sendMsg :: Int -> Msg -> S.StateT Store m ()

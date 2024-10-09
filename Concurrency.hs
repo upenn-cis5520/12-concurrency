@@ -1,7 +1,7 @@
 {-
 ---
 fulltitle: A Poor Man's Concurrency Monad
-date: November 27, 2023
+date: November 18, 2024
 ---
 
 NOTE: We will work through the `undefined` parts of this lecture together in
@@ -18,9 +18,9 @@ To use this module, you will also need the the [Client](Client.html) module.
 module Concurrency where
 
 import Control.Monad (ap, liftM)
-import qualified Data.IORef as IO
-import qualified Network.Socket as Socket -- from the `network` library
-import qualified System.IO as IO
+import Data.IORef qualified as IO
+import Network.Socket qualified as Socket -- from the `network` library
+import System.IO qualified as IO
 
 {-
 In this lecture, we'll combine a number of ideas from recent lectures (monads
@@ -410,7 +410,7 @@ For example, consider a class of monads that support text
 output. These are the ones that have a `write` operation.
 -}
 
-class Monad m => OutputMonad m where
+class (Monad m) => OutputMonad m where
   write :: String -> m ()
 
 {-
@@ -437,7 +437,7 @@ Here is an infinite loop that just prints its argument over and
 over.
 -}
 
-infloop :: OutputMonad m => String -> m ()
+infloop :: (OutputMonad m) => String -> m ()
 infloop = undefined
 
 {-
@@ -489,7 +489,7 @@ one ready.  If there is no input available, it immediately returns
 `Nothing`.
 -}
 
-class Monad m => InputMonad m where
+class (Monad m) => InputMonad m where
   input :: m (Maybe String)
 
 {-
@@ -571,7 +571,7 @@ Then, a class of monads that can create mailboxes for these messages
 and send and receive messages through these mailboxes.
 -}
 
-class Monad m => MsgMonad b m | m -> b where
+class (Monad m) => MsgMonad b m | m -> b where
   newMailbox :: m b
   sendMsg :: b -> Msg -> m ()
   checkMsg :: b -> m (Maybe Msg)
@@ -694,14 +694,13 @@ up a socket to listen for commands sent via the code in
 -- on the specified port
 network :: String -> Mailbox -> C ()
 network port mv = do
-  handle <- atomic $
-    Socket.withSocketsDo $ do
-      putStrLn "Opening a socket."
-      addr <- resolve
-      sock <- open addr
-      (conn, _peer) <- Socket.accept sock
-      putStrLn "Connected to socket."
-      Socket.socketToHandle conn IO.ReadMode
+  handle <- atomic $ Socket.withSocketsDo $ do
+    putStrLn "Opening a socket."
+    addr <- resolve
+    sock <- open addr
+    (conn, _peer) <- Socket.accept sock
+    putStrLn "Connected to socket."
+    Socket.socketToHandle conn IO.ReadMode
   interface
     mv
     ( atomic $ do
