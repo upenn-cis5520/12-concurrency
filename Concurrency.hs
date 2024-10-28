@@ -92,8 +92,8 @@ its value.
 We're going to divide up computations into slices called *actions*.
 All computations in this monad should be `Action`s, and their
 continuations should likewise produce new `Action`s.  An action can be
-an atomic action, a Fork, which splits the current thread into two new
-threads, or a Stop action that halts the thread.
+an atomic action, a `Fork`, which splits the current thread into two new
+threads, or a `Stop` action that halts the thread.
 -}
 
 data Action
@@ -103,18 +103,21 @@ data Action
 
 {-
 Let's look at some example actions.  For example, this one writes out a
-single string letter by letter.
+single string in one go.
+-}
+
+atomicWrite :: String -> Action
+atomicWrite s = Atomic (putStr s >> return Stop)
+
+{-
+And this one writes out a string letter by letter.
 -}
 
 writeAction :: String -> Action
-writeAction = undefined
-
-{-
-And this one writes two strings concurrently.
--}
-
-prog :: Action
-prog = Fork (writeAction "Hello\n") (writeAction "CIS 5520\n")
+writeAction "" = Stop
+writeAction (c : cs) = Atomic $ do
+  putChar c
+  return $ writeAction cs
 
 {-
 How do we run these programs?
@@ -145,7 +148,12 @@ The job of the thread scheduler is to run the threads in the queue.
 -}
 
 sched :: [Action] -> IO ()
-sched = undefined
+sched [] = return ()
+sched (Atomic io : cs) = do
+  a <- io
+  sched (cs ++ [a])
+sched (Fork a1 a2 : cs) = sched (cs ++ [a2, a1])
+sched (Stop : cs) = sched cs
 
 {-
 To make sure that we get the full effect of concurrency, we'll
@@ -154,18 +162,17 @@ first turn off buffering on the standard input and output sources.
 
 --    ghci> import System.IO
 --    ghci> hSetBuffering stdout NoBuffering
---    ghci> hSetBuffering stdin NoBuffering
+--    ghci> hSetBuffering stdout NoBuffering
 
 {-
 Then we can use the schedular to run the program:
 -}
 
---    ghci> sched [ prog ]
+--    ghci> sched [ Fork (atomicWrite "Hello\n") (atomicWrite "CIS 5520\n") ]
+
+--    ghci> sched [ Fork (writeAction "Hello\n") (writeAction "CIS 5520\n") ]
 
 {-
-    CHIeSl l5o5
-    20
-
 Writing Programs, compositionally
 =================================
 
@@ -343,14 +350,24 @@ instance Monad C where
   (>>=) :: C a -> (a -> C b) -> C b
   m >>= f = MkC $ \k -> runC m (\v -> runC (f v) k)
 
-  return :: a -> C a
-  return x = MkC $ \k -> k x
+{-
+>
+-}
 
 instance Applicative C where
   pure :: a -> C a
-  pure = return
+  pure x = MkC $ \k -> k x
+
+  {-
+  >
+  -}
+
   (<*>) :: C (a -> b) -> C a -> C b
   (<*>) = ap
+
+{-
+>
+-}
 
 instance Functor C where
   fmap :: (a -> b) -> C a -> C b
